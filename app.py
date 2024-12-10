@@ -14,8 +14,8 @@ load_dotenv()
 
 app = Flask(__name__)
 
-
-client = MongoClient("mongodb://mongodb:27017/")
+MONGO_URI = os.getenv("MONGO_URI")
+client = MongoClient(MONGO_URI)
 db = client.mydatabase
 metrics_collection = db.system_metrics  
 daily_max_collection = db.daily_max_metrics 
@@ -108,7 +108,7 @@ def export_daily_max_pdf(date):
         return jsonify({"error": "No data found for the given date"}), 404
 
     file_name = f"{date}_daily_max_report.pdf"
-    create_daily_max_pdf(date, data, output_file=file_name)
+    create_daily_max_pdf(date, data, "./avaxia-logo.png" ,output_file=file_name)
 
     return send_file(file_name, as_attachment=True)
 
@@ -167,13 +167,14 @@ def delete_shift_data(date, day_shift):
     if result.deleted_count == 0:
         return jsonify({"error": "No data found to delete for the given date and shift"}), 404
     return jsonify({"message": "Data deleted successfully!"})
-def create_daily_max_pdf(date, max_data, output_file="daily_max_report.pdf"):
 
+
+def create_daily_max_pdf(date, max_data, header_image_path, output_file="daily_max_report.pdf"):
     class PDF(FPDF):
         def header(self):
-            self.set_font("Arial", "B", 16)
-            self.cell(0, 10, "Daily Monitoring Report", 0, 1, "C")
-            self.ln(10)
+            
+            self.image(header_image_path, x=10, y=-12, w=190)  
+            self.ln(20) 
 
         def footer(self):
             self.set_y(-15)
@@ -184,28 +185,33 @@ def create_daily_max_pdf(date, max_data, output_file="daily_max_report.pdf"):
     pdf.add_page()
     pdf.set_font("Arial", size=12)
 
+    
     pdf.set_font("Arial", "B", 14)
-    pdf.cell(0, 10, f"Date: {date}", ln=True, align="L")
+    pdf.cell(0, 10, f"Date: {date}", ln=True, align="C")  
     pdf.ln(10)
 
+    
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 10, "Organizational Applications: PTO", ln=True)
     pdf.ln(5)
     pdf.set_font("Arial", size=12)
+
+    
     pdf.cell(60, 10, "Component", 1, 0, "C")
-    pdf.cell(60, 10, "CPU Usage (core)", 1, 0, "C")
-    pdf.cell(60, 10, "Memory Usage (MiB)", 1, 0, "C")
-    pdf.cell(60, 10, "Application Availability (%)", 1, 1, "C")
+    pdf.cell(40, 10, "CPU Usage (core)", 1, 0, "C")
+    pdf.cell(50, 10, "Memory Usage (MiB)", 1, 0, "C")
+    pdf.cell(45, 10, "Availability (%)", 1, 1, "C")
 
     for component in ["blc-be", "blc-fe", "gco-be", "gco-fe", "sbp-fe"]:
-        cpu = max_data["max_cpu_usage"].get(component, "N/A")
-        memory = max_data["max_memory_usage"].get(component, "N/A")
-        availability = "100%" if component != "sbp-be" else "down"
-        pdf.cell(60, 10, component, 1)
-        pdf.cell(60, 10, str(cpu), 1)
-        pdf.cell(60, 10, str(memory), 1)
-        pdf.cell(60, 10, availability, 1)
-        pdf.ln(10)
+        cpu = max_data["max_cpu_usage"].get(component, "Not Available")
+        memory = max_data["max_memory_usage"].get(component, "Not Available")
+        availability = "100%" if component != "sbp-be" else "Down"
+
+        
+        pdf.cell(60, 10, component, 1, 0, "C") 
+        pdf.cell(40, 10, str(cpu), 1, 0, "C")  
+        pdf.cell(50, 10, f"{memory} MiB" if memory != "Not Available" else memory, 1, 0, "C")  
+        pdf.cell(45, 10, availability, 1, 1, "C") 
 
     pdf.ln(10)
 
@@ -213,24 +219,25 @@ def create_daily_max_pdf(date, max_data, output_file="daily_max_report.pdf"):
     pdf.cell(0, 10, "Tools:", ln=True)
     pdf.ln(5)
     pdf.set_font("Arial", size=12)
-    pdf.cell(60, 10, "Component", 1, 0, "C")
-    pdf.cell(60, 10, "CPU Usage (core)", 1, 0, "C")
-    pdf.cell(60, 10, "Memory Usage (MiB)", 1, 0, "C")
-    pdf.cell(60, 10, "Application Availability (%)", 1, 1, "C")
+
+    pdf.cell(65, 10, "Component", 1, 0, "C")
+    pdf.cell(40, 10, "CPU Usage (core)", 1, 0, "C")
+    pdf.cell(50, 10, "Memory Usage (MiB)", 1, 0, "C")
+    pdf.cell(40, 10, "Availability (%)", 1, 1, "C")
 
     for component in max_data["max_cpu_usage"]:
         if component not in ["blc-be", "blc-fe", "gco-be", "gco-fe", "sbp-fe"]:
-            cpu = max_data["max_cpu_usage"].get(component, "N/A")
-            memory = max_data["max_memory_usage"].get(component, "N/A")
-            availability = "100%" 
-            pdf.cell(60, 10, component, 1)
-            pdf.cell(60, 10, str(cpu), 1)
-            pdf.cell(60, 10, str(memory), 1)
-            pdf.cell(60, 10, availability, 1)
-            pdf.ln(10)
+            cpu = max_data["max_cpu_usage"].get(component, "Not Available")
+            memory = max_data["max_memory_usage"].get(component, "Not Available")
+            availability = "100%"  
+            pdf.cell(65, 10, component, 1, 0, "C") 
+            pdf.cell(40, 10, str(cpu), 1, 0, "C")  
+            pdf.cell(50, 10, f"{memory} MiB" if memory != "Not Available" else memory, 1, 0, "C") 
+            pdf.cell(40, 10, availability, 1, 1, "C") 
 
     pdf.output(output_file)
     return output_file
+
 
 if __name__ == "__main__":
     app.run(debug=True)

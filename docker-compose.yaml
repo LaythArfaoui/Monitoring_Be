@@ -1,17 +1,19 @@
 version: "3.8"
 services:
   flask-app:
-    build:
-      context: .
+    build: .
+    command: python -u app.py
     ports:
       - "5000:5000"
     env_file:
       - .env
-    depends_on:
+    volumes:
+      - .:/app
+    links:
       - mongodb
 
   mongodb:
     image: mongo:latest
-    container_name: mongodb
+    hostname: mongodb
     ports:
       - "27017:27017"
