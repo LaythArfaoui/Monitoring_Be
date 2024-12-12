@@ -24,9 +24,6 @@ db = client.mydatabase
 metrics_collection = db.system_metrics  # Collection for system metrics
 daily_max_collection = db.daily_max_metrics  # Collection for daily maximum metrics
 
-@app.route("/")  # Home route
-def home():
-    return "Welcome to the System Metrics API!"
 
 # Route to add data
 @app.route("/add", methods=["POST"])
@@ -89,8 +86,8 @@ def calculate_and_store_max_metrics(date):
     # Prepare the max metrics data
     max_metrics = {
         "date": date,
-        "max_cpu_usage": max_cpu,
-        "max_memory_usage": max_memory,
+        "cpu_usage": max_cpu,
+        "memory_usage": max_memory,
         "application_availability": application_availability
     }
 
@@ -120,23 +117,18 @@ def get_daily_max(date):
         return jsonify({"error": f"No max metrics found for the given date: {date}"}), 404
     return jsonify(max_metrics)
 
-# Renamed route for retrieving data by shift
-@app.route("/get-by-shift-native/<string:date>/<int:shift>", methods=["GET"])
-def get_by_shift_renamed(date, shift):
-    data = list(metrics_collection.find({"date": date, "day-shift": shift}, {"_id": 0}))
-    if not data:
-        return jsonify({"error": f"No data found for the given date: {date} and shift: {shift}"}), 404
-    return jsonify(data)
+
 
 # Route to export data for a specific shift into a PDF
 @app.route("/export-native-shift-pdf/<string:date>/<int:shift>", methods=["GET"])
 def export_by_shift_pdf(date, shift):
-    data = list(metrics_collection.find({"date": date, "day-shift": shift}, {"_id": 0}))
+    data = metrics_collection.find_one({"date": date, "day-shift": shift}, {"_id": 0})
     if not data:
         return jsonify({"error": f"No data found for the given date: {date} and shift: {shift}"}), 404
     
+    print(data)
     file_name = f"{date}_shift_{shift}_report.pdf"
-    create_shift_pdf(date, shift, data, output_file=file_name)  # Generate the PDF
+    create_daily_max_pdf(date, data, "./avaxia-logo.png", output_file=file_name)  # Generate the PDF
 
     return send_file(file_name, as_attachment=True)  # Send the PDF as an attachment
 
@@ -246,8 +238,8 @@ def create_daily_max_pdf(date, max_data, header_image_path, output_file="daily_m
 
     # Add data for each component
     for component in ["blc-be", "blc-fe", "gco-be", "gco-fe", "sbp-fe"]:
-        cpu = max_data["max_cpu_usage"].get(component, "Not Available")
-        memory = max_data["max_memory_usage"].get(component, "Not Available")
+        cpu = max_data["cpu_usage"].get(component, "Not Available")
+        memory = max_data["memory_usage"].get(component, "Not Available")
         availability = "100%" if component != "sbp-be" else "Down"
         
         pdf.cell(60, 10, component, 1, 0, "C")
@@ -269,10 +261,10 @@ def create_daily_max_pdf(date, max_data, header_image_path, output_file="daily_m
     pdf.cell(40, 10, "Availability (%)", 1, 1, "C")
 
     # Add data for tools components
-    for component in max_data["max_cpu_usage"]:
+    for component in max_data["cpu_usage"]:
         if component not in ["blc-be", "blc-fe", "gco-be", "gco-fe", "sbp-fe"]:
-            cpu = max_data["max_cpu_usage"].get(component, "Not Available")
-            memory = max_data["max_memory_usage"].get(component, "Not Available")
+            cpu = max_data["cpu_usage"].get(component, "Not Available")
+            memory = max_data["memory_usage"].get(component, "Not Available")
             availability = "100%"  
 
             pdf.cell(65, 10, component, 1, 0, "C")
@@ -282,7 +274,11 @@ def create_daily_max_pdf(date, max_data, header_image_path, output_file="daily_m
 
     pdf.output(output_file)  # Output PDF
     return output_file
+#
 
 # Run the app in debug mode
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    HOST = os.getenv("HOST")
+    PORT = os.getenv("PORT")
+    app.run(host=HOST,port=PORT)
